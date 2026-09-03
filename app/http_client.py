@@ -24,7 +24,7 @@ class WebTester:
             response=self.session.get(url, headers={"User-Agent":self.user_agent, "Accept":"text/html,application/xhtml+xml"}, timeout=(self.connect_timeout,self.total_timeout), allow_redirects=True, stream=True)
             content=next(response.iter_content(65536), b"").decode(response.encoding or "utf-8", errors="replace")
             result.final_url=response.url; result.http_status=response.status_code; result.duration_ms=round((time.monotonic()-started)*1000)
-            result.redirects=[r.url for r in response.history]; result.headers={k:v[:500] for k,v in response.headers.items() if k.lower() in {"server","via","location","content-type","x-squid-error","x-bluecoat-via","x-zscaler","x-cisco-umbrella"}}
+            result.redirects=[r.url for r in response.history]; result.headers={k:v[:500] for k,v in response.headers.items() if k.lower() in {"server","via","location","content-type","www-authenticate","proxy-authenticate","x-squid-error","x-bluecoat-via","x-zscaler","x-cisco-umbrella"}}
             match=TITLE.search(content); result.page_title=(match.group(1).strip() if match else "")[:500]
             # classifier receives bounded title plus selected headers; do not persist full page.
             result.headers["X-Analysis-Snippet"] = re.sub(r"<[^>]+>", " ", content)[:8192]

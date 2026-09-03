@@ -4,7 +4,7 @@ from unittest.mock import patch
 from app.classifier import classify
 from app.models import TestResult
 from app.parsers import load_urls
-from app.exporters import export_csv, export_html
+from app.exporters import export_csv, export_excel, export_html
 from app.dns_checker import resolve
 from app.security import UrlValidationError, validate_url
 class CoreTests(unittest.TestCase):
@@ -19,6 +19,11 @@ class CoreTests(unittest.TestCase):
   sig={"blocking":["blocked by policy","access denied"],"ip_restriction":["ip address not allowed"],"proxy_headers":["via"]}
   r=TestResult("https://example.com",http_status=403,headers={"Via":"proxy","X-Analysis-Snippet":"blocked by policy access denied"}); self.assertEqual(classify(r,sig).classification,"ACCESS_DENIED")
   r=TestResult("https://example.com",http_status=403,headers={"X-Analysis-Snippet":"IP address not allowed"}); self.assertEqual(classify(r,sig).classification,"IP_RESTRICTION")
+ def test_authentication_page_classification(self):
+  r=TestResult("https://example.com",http_status=200,page_title="Sign in",headers={"X-Analysis-Snippet":"Please authenticate"})
+  self.assertEqual(classify(r,{"blocking":[],"ip_restriction":[],"authentication":["sign in","authenticate"],"proxy_headers":[]}).classification,"AUTHENTICATION_REQUIRED")
+  r=TestResult("https://example.com",http_status=401)
+  self.assertEqual(classify(r,{"blocking":[],"ip_restriction":[],"authentication":[],"proxy_headers":[]}).classification,"AUTHENTICATION_REQUIRED")
  def test_plain_403_not_blocked(self):
   r=TestResult("https://example.com",http_status=403); self.assertEqual(classify(r,{"blocking":["blocked"],"ip_restriction":[],"proxy_headers":[]}).classification,"HTTP_403")
  def test_dns_error(self):
@@ -26,8 +31,11 @@ class CoreTests(unittest.TestCase):
  def test_exports(self):
   r=TestResult("https://example.com",classification="ACCESS_ALLOWED")
   with tempfile.TemporaryDirectory() as d:
-   csv_path=Path(d)/"x.csv"; html_path=Path(d)/"x.html"; export_csv([r],csv_path); export_html([r],html_path,{"ip":"203.0.113.1"})
+   csv_path=Path(d)/"x.csv"; excel_path=Path(d)/"x.xlsx"; html_path=Path(d)/"x.html"; export_csv([r],csv_path); export_excel([r],excel_path,{"ip":"203.0.113.1"}); export_html([r],html_path,{"ip":"203.0.113.1"})
    self.assertIn("classification",csv_path.read_text()); self.assertIn("Test Summary",html_path.read_text())
+   from zipfile import ZipFile
+   with ZipFile(excel_path) as workbook:
+    self.assertIn("ACCESS_ALLOWED",workbook.read("xl/worksheets/sheet2.xml").decode()); self.assertIn("203.0.113.1",workbook.read("xl/worksheets/sheet1.xml").decode())
 
 class HttpClientTests(unittest.TestCase):
  @unittest.skipUnless(__import__("importlib").util.find_spec("requests"), "requests dependency is not installed")
