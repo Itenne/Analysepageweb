@@ -11,6 +11,7 @@ from .security import validate_url, UrlValidationError
 from .classifier import classify
 from .targets import fqdn_for_url
 TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+MAX_PAGE_HTML_BYTES = 1_048_576
 class WebTester:
     def __init__(self, signatures: dict, connect_timeout=10, total_timeout=20, use_system_proxy=True, user_agent="SASE-Web-Validation-Tool/0.1.0"):
         self.signatures, self.connect_timeout, self.total_timeout = signatures, connect_timeout, total_timeout
@@ -45,11 +46,21 @@ class WebTester:
         started=time.monotonic()
         try:
             response=self.session.get(url, headers={"User-Agent":self.user_agent, "Accept":"text/html,application/xhtml+xml"}, timeout=(self.connect_timeout,self.total_timeout), allow_redirects=True, stream=True)
-            content=next(response.iter_content(65536), b"").decode(response.encoding or "utf-8", errors="replace")
+            chunks = []
+            remaining = MAX_PAGE_HTML_BYTES
+            for chunk in response.iter_content(65536):
+                if not chunk:
+                    continue
+                chunks.append(chunk[:remaining])
+                remaining -= len(chunks[-1])
+                if remaining == 0:
+                    break
+            content = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
             result.final_url=response.url; result.http_status=response.status_code; result.duration_ms=round((time.monotonic()-started)*1000)
             result.redirects=[r.url for r in response.history]; result.headers={k:v[:500] for k,v in response.headers.items() if k.lower() in {"server","via","location","content-type","www-authenticate","proxy-authenticate","x-squid-error","x-bluecoat-via","x-zscaler","x-cisco-umbrella"}}
             match=TITLE.search(content); result.page_title=(match.group(1).strip() if match else "")[:500]
-            # classifier receives bounded title plus selected headers; do not persist full page.
+            result.page_html = content
+            # The classifier only needs a bounded text excerpt from the page.
             result.headers["X-Analysis-Snippet"] = re.sub(r"<[^>]+>", " ", content)[:8192]
             # Reuse the DNS answer already recorded for the target FQDN.  A
             # redirected destination is intentionally not resolved separately.
