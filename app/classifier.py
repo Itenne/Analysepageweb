@@ -6,10 +6,17 @@ def classify(result: TestResult, signatures: dict) -> TestResult:
     # Only diagnostic snippets are supplied; full response bodies are never retained.
     ip_hits = [s for s in signatures["ip_restriction"] if s.lower() in text]
     block_hits = [s for s in signatures["blocking"] if s.lower() in text]
+    authentication_hits = [s for s in signatures.get("authentication", []) if s.lower() in text]
     proxy_hit = any(header in {k.lower() for k in result.headers} for header in signatures.get("proxy_headers", []))
     if ip_hits:
         result.classification = "IP_RESTRICTION"; result.confidence = "HIGH" if result.http_status in {401, 403, 451} and len(ip_hits) >= 1 else "MEDIUM"
         result.reason = "Response content indicates a possible source IP restriction; this is an indication, not proof."; result.indicators = ip_hits; return result
+    if authentication_hits or result.http_status in {401, 407}:
+        result.classification = "AUTHENTICATION_REQUIRED"
+        result.confidence = "HIGH" if result.http_status in {401, 407} else "MEDIUM"
+        result.reason = "Authentication page indicators were detected; credentials were not submitted."
+        result.indicators = authentication_hits
+        return result
     if result.http_status in {401,403,407,451} and (len(block_hits) >= 2 or (block_hits and proxy_hit)):
         result.classification = "ACCESS_DENIED"; result.confidence = "HIGH" if len(block_hits) >= 2 else "MEDIUM"
         result.reason = "Web filtering policy page indicators were detected."; result.indicators = block_hits; return result
