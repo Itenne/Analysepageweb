@@ -13,6 +13,7 @@ from .http_client import WebTester
 from .parsers import parse_csv, parse_txt
 from .public_ip import detect_public_ip
 from .signatures import load_signatures
+from .targets import unique_urls_by_fqdn
 
 MAX_UPLOAD_BYTES = 1_000_000
 
@@ -39,7 +40,9 @@ class TestRun:
         with self.lock:
             if self.state == "running":
                 raise ValueError("A test run is already in progress")
-            self.urls, self.results, self.completed = urls, [], 0
+            self.urls = unique_urls_by_fqdn(urls)
+            self.tester.clear_dns_cache()
+            self.results, self.completed = [], 0
             self.state = "running"
             self.cancel.clear()
         threading.Thread(target=self._run, args=(max(1, min(workers, 20)),), daemon=True).start()
