@@ -7,6 +7,7 @@ from .parsers import load_urls
 from .http_client import WebTester
 from .public_ip import detect_public_ip
 from .exporters import export_csv, export_excel, export_html
+from .targets import unique_urls_by_fqdn
 class ValidatorUI(ttk.Frame):
     def __init__(self, root, tester):
         super().__init__(root,padding=10); self.root,self.tester=root,tester; self.pack(fill="both",expand=True); self.urls=[]; self.results=[]; self.public_ip={}; self.cancel=threading.Event(); self.events=queue.Queue(); self._build(); self.root.after(100,self._poll)
@@ -35,6 +36,9 @@ class ValidatorUI(ttk.Frame):
         self.tree.delete(*self.tree.get_children()); [self.tree.insert("","end",values=(url,"PENDING","","","","","","")) for url in self.urls]
     def detect_ip(self): threading.Thread(target=lambda:self.events.put(("ip",detect_public_ip(use_system_proxy=self.tester.session.trust_env))),daemon=True).start()
     def test_all(self):
+        self.urls = unique_urls_by_fqdn(self.urls)
+        self.refresh_pending()
+        self.tester.clear_dns_cache()
         self.cancel.clear(); self.results=[]; self.progress.configure(maximum=len(self.urls),value=0); threading.Thread(target=self._run,daemon=True).start()
     def _run(self):
         with ThreadPoolExecutor(max_workers=5) as pool:
