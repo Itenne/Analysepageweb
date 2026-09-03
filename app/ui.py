@@ -15,7 +15,7 @@ class ValidatorUI(ttk.Frame):
         self.root.title("SASE Web Filtering Validation Tool"); ttk.Label(self,text="SASE Web Filtering Validation Tool",font=("Segoe UI",16,"bold")).pack(anchor="w")
         self.ip_label=ttk.Label(self,text="Public Internet IP: not detected"); self.ip_label.pack(anchor="w",pady=(2,8))
         bar=ttk.Frame(self); bar.pack(fill="x");
-        for text,cmd in [("Load URLs",self.load),("Add URL",self.add),("Detect Public IP",self.detect_ip),("Test All",self.test_all),("Stop",self.stop),("Export CSV",self.export_csv),("Export Excel",self.export_excel),("Export HTML",self.export_html),("Clear",self.clear)]: ttk.Button(bar,text=text,command=cmd).pack(side="left",padx=2)
+        for text,cmd in [("Load URLs",self.load),("Add URL",self.add),("Detect Public IP",self.detect_ip),("Test All",self.test_all),("Stop",self.stop),("Copier le résultat",self.copy_result),("Export CSV",self.export_csv),("Export Excel",self.export_excel),("Export HTML",self.export_html),("Clear",self.clear)]: ttk.Button(bar,text=text,command=cmd).pack(side="left",padx=2)
         cols=("url","status","http","final","ip","duration","classification","confidence"); self.tree=ttk.Treeview(self,columns=cols,show="headings",height=14)
         for col,title,width in zip(cols,["URL","Status","HTTP","Final URL","Public IP","Duration","Classification","Confidence"],[260,90,60,260,120,80,140,90]): self.tree.heading(col,text=title); self.tree.column(col,width=width,stretch=col in {"url","final"})
         self.tree.pack(fill="both",expand=True); self.tree.bind("<<TreeviewSelect>>",self.detail); self.progress=ttk.Progressbar(self,mode="determinate"); self.progress.pack(fill="x",pady=5); self.details=tk.Text(self,height=10,wrap="word"); self.details.pack(fill="x")
@@ -63,6 +63,12 @@ class ValidatorUI(ttk.Frame):
         if not selected:return
         url=self.tree.item(selected[0],"values")[0]; r=next((x for x in self.results if x.url==url),None)
         if r: self.details.delete("1.0","end"); self.details.insert("end",f"URL: {r.url}\nFinal URL: {r.final_url}\nDNS: {r.dns.status} {', '.join(r.dns.addresses)}\nHTTP: {r.http_status}\nClassification: {r.classification} ({r.confidence})\nReason: {r.reason}\nIndicators: {', '.join(r.indicators)}\nError: {r.error}")
+    def copy_result(self):
+        text = self.details.get("1.0", "end-1c")
+        if not self.tree.selection() or not text:
+            messagebox.showinfo("Copier le résultat", "Sélectionnez d'abord un résultat de test.")
+            return
+        self.root.clipboard_clear(); self.root.clipboard_append(text); self.root.update()
     def export_csv(self):
         path=filedialog.asksaveasfilename(defaultextension=".csv"); path and export_csv(self.results,path)
     def export_excel(self):
