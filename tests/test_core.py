@@ -39,12 +39,3 @@ class HttpClientTests(unittest.TestCase):
    self.assertEqual(tester.test("https://example.com").classification,"TIMEOUT")
   with patch("app.http_client.resolve",return_value=__import__('app.models',fromlist=['DnsResult']).DnsResult("OK",["93.184.216.34"])), patch.object(tester.session,"get",side_effect=exceptions.SSLError("bad cert")):
    self.assertEqual(tester.test("https://example.com").classification,"TLS_ERROR")
-
-class WebUiTests(unittest.TestCase):
- @unittest.skipUnless(__import__("importlib").util.find_spec("flask") and __import__("importlib").util.find_spec("requests"), "web dependencies are not installed")
- def test_local_web_routes_and_loopback_contract(self):
-  from app.web import create_app
-  app=create_app(); client=app.test_client()
-  self.assertEqual(client.get('/').status_code,200)
-  self.assertEqual(client.post('/api/urls',json={'text':'https://example.com','format':'txt'}).status_code,200)
-  self.assertEqual(client.get('/api/status').get_json()['total'],1)

@@ -1,20 +1,20 @@
 # SASE Web Filtering Validation Tool
 
-Outil de diagnostic **Web local portable**. Il démarre une page sur `http://127.0.0.1:8080` dans le navigateur du poste et teste les URL depuis ce même poste, donc via son chemin réseau, proxy et SASE habituels. Il ne modifie ni les routes, ni le DNS, ni le proxy système, ni la validation TLS ; il ne fournit aucun mécanisme de contournement.
+Local, user-space diagnostic application for validating normal HTTP/HTTPS access through the workstation's existing network and proxy/SASE path. It does **not** modify routing, DNS, system proxy settings, TLS verification, or use bypass mechanisms.
 
 ## Architecture
 
-- `app/web.py` : serveur Flask local uniquement et orchestration asynchrone des tests.
-- `app/templates/` et `app/static/` : interface Web locale sans dépendance JavaScript externe.
-- `app/security.py`, `parsers.py`, `dns_checker.py`, `http_client.py` : validation SSRF, import, DNS et requête HTTP(S).
-- `classifier.py` + `config/signatures.json` : moteur configurable de détection SASE/proxy et de restriction IP.
-- `public_ip.py`, `exporters.py` : observation de l’IP publique et rapports CSV/HTML.
+- `app/security.py`: validates absolute HTTP(S) URLs and rejects local/private, loopback, link-local, and reserved destinations.
+- `app/parsers.py`, `dns_checker.py`, `http_client.py`: input parsing; DNS and one normal GET request (plus normal redirects) using `requests` and OS proxy settings by default.
+- `classifier.py` and `config/signatures.json`: configurable, multi-signal block/IP-restriction detection.
+- `public_ip.py`: compares two public IP observation services.
+- `ui.py` and `exporters.py`: Tkinter desktop interface and CSV/HTML reporting.
 
-Les résultats sont des modèles sérialisables : une comparaison de rapports avant/après pourra réutiliser URL, URL finale, code HTTP et classification.
+Results are structured dataclasses and CSV fields, so a future before/after report comparer can use stable URL, final URL, status, and classification fields.
 
-## Installation et lancement
+## Install and run
 
-Prérequis : Python 3.10+ et accès aux dépendances Python.
+Requires Python 3.10+ and Tkinter (normally included with Windows Python).
 
 ```powershell
 py -m venv .venv
@@ -23,36 +23,39 @@ pip install -r requirements.txt
 python -m app.main
 ```
 
-Le navigateur par défaut s’ouvre sur `http://127.0.0.1:8080`. Le serveur écoute **exclusivement** sur `127.0.0.1`, jamais sur le réseau local. Aucun droit administrateur n’est nécessaire.
+No administrator privileges are required. The tool uses Requests' standard environment proxy discovery (`Session.trust_env=True`); it neither edits proxy configuration nor establishes a direct/bypass path.
 
-## Utilisation
+## Input
 
-1. Chargez un fichier `.txt` (une URL par ligne) ou `.csv` (colonne `url`, séparateur `;` ou `,`), ou ajoutez une URL manuellement.
-2. Cliquez sur **Detect Public IP**. Deux services d’observation sont interrogés avec le proxy système normal ; deux réponses identiques donnent une confiance `HIGH`.
-3. Choisissez le nombre de connexions simultanées (5 par défaut, maximum 20), puis cliquez sur **Test All**. La progression est actualisée sans bloquer la page ; **Stop** annule les tâches non commencées.
-4. Cliquez sur une ligne pour afficher le DNS, IP distante, redirections, headers pertinents, classification et indicateurs.
-5. Téléchargez les rapports **CSV** ou **HTML**.
+Load `.txt` with one URL per line, or `.csv` with a `url` column. CSV comma and semicolon delimiters are accepted. Extra columns such as `name` and `expected` are preserved during parsing for future use. See `sample/urls.csv`.
 
-Les importations sont limitées à 1 Mo. Les URL HTTP(S) sont validées et les destinations locales, privées, loopback, link-local et réservées sont refusées. Le User-Agent est explicite (`SASE-Web-Validation-Tool/0.1.0`) ; les certificats TLS restent vérifiés. La réponse analysée est limitée à 64 KiB et l’outil ne conserve pas le corps intégral des pages, cookies, tokens ou credentials.
+## Operation
 
-## Détection et limites
+1. Select **Load URLs** or **Add URL**.
+2. Select **Detect Public IP**. Two configurable endpoints are queried. Matching observations yield HIGH confidence; differing values yield LOW.
+3. Select **Test All**. Tests run in a pool of five, so an individual timeout does not stall the UI or other URLs.
+4. Select a result for DNS, status, indicator, and error details. Export CSV or HTML.
 
-Un simple `403` est classé `HTTP_403`, pas comme un blocage. `ACCESS_DENIED` exige un code de refus et des signaux corroborants (au moins deux signatures, ou une signature et un header proxy/SASE). `IP_RESTRICTION` est prioritaire lorsqu’un indicateur IP configurable est présent. Les signatures peuvent être ajoutées dans `config/signatures.json`, notamment pour d’autres langues.
+The user agent is `SASE-Web-Validation-Tool/0.1.0`; TLS certificates are always verified. The response analysis is bounded to 64 KiB and only selected headers, title, and detected indicators are retained in results/logging.
 
-> Une classification `ACCESS_DENIED` ou `IP_RESTRICTION` est une indication basée sur les éléments observés par l’outil ; elle ne constitue pas une preuve définitive de la cause du blocage.
+## Detection and limitations
 
-Le comportement dépend des réponses visibles au poste : une application peut masquer sa cause de refus, un proxy peut masquer l’IP distante, et les services de détection d’IP publique peuvent être bloqués. L’outil ne fait ni scan de ports, ni fuzzing, ni brute force, ni authentification, ni tunnel, ni VPN/Tor.
+A 403 alone remains `HTTP_403`. `ACCESS_DENIED` requires an access-denial HTTP status and corroborating configurable blocking signals (two signatures, or a signature plus proxy/SASE header). `IP_RESTRICTION` is prioritized when configured IP-specific text is observed. Add languages or vendor wording in `config/signatures.json` without code changes.
 
-## Exécutable Windows portable
+> `ACCESS_DENIED` and `IP_RESTRICTION` are indications based on observed response data and are not definitive proof of the cause of a block.
 
-Créez l’exécutable sous Windows :
+HTTP status, redirects, DNS, and error classes are diagnostic observations only. Some proxies hide remote IPs; public-IP providers may be unavailable or intentionally blocked. This tool does not authenticate, collect credentials/cookies/tokens, scan ports, fuzz, or retrieve full page content.
+
+## Windows executable
+
+On Windows, after installing dependencies:
 
 ```powershell
 pip install pyinstaller
-pyinstaller --noconfirm --onefile --add-data "app/templates;app/templates" --add-data "app/static;app/static" --add-data "config;config" --name SASEWebValidator app\main.py
+pyinstaller --noconfirm --onefile --windowed --add-data "config;config" --name SASEWebValidator app\main.py
 ```
 
-Testez l’exécutable produit dans `dist\SASEWebValidator.exe` avec un compte utilisateur standard. Pour une distribution réellement autonome, incluez les dépendances installées par PyInstaller et vérifiez le chargement des signatures après packaging.
+Run `dist\SASEWebValidator.exe` as the standard user. Keep `config/signatures.json` adjacent to the packaged resource as appropriate for your PyInstaller deployment; test signature loading after packaging.
 
 ## Tests
 
