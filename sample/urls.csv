@@ -1,0 +1,4 @@
+url;name;expected
+https://www.microsoft.com;Microsoft;allowed
+https://www.github.com;GitHub;allowed
+https://example.com;Example;allowed
