@@ -7,6 +7,7 @@ from app.parsers import load_urls
 from app.exporters import export_csv, export_excel, export_html
 from app.dns_checker import resolve
 from app.security import UrlValidationError, validate_url
+from app.targets import unique_urls_by_fqdn
 class CoreTests(unittest.TestCase):
  def test_txt_and_csv_parsing(self):
   with tempfile.TemporaryDirectory() as d:
@@ -28,6 +29,9 @@ class CoreTests(unittest.TestCase):
   r=TestResult("https://example.com",http_status=403); self.assertEqual(classify(r,{"blocking":["blocked"],"ip_restriction":[],"proxy_headers":[]}).classification,"HTTP_403")
  def test_dns_error(self):
   with patch("app.dns_checker.socket.getaddrinfo",side_effect=__import__('socket').gaierror()): self.assertEqual(resolve("invalid.example").status,"DNS_ERROR")
+ def test_urls_with_same_fqdn_are_only_tested_once(self):
+  urls=["https://Example.com/a", "http://example.com/b", "https://other.example/"]
+  self.assertEqual(unique_urls_by_fqdn(urls), ["https://Example.com/a", "https://other.example/"])
  def test_exports(self):
   r=TestResult("https://example.com",classification="ACCESS_ALLOWED")
   with tempfile.TemporaryDirectory() as d:
@@ -47,3 +51,12 @@ class HttpClientTests(unittest.TestCase):
    self.assertEqual(tester.test("https://example.com").classification,"TIMEOUT")
   with patch("app.http_client.resolve",return_value=__import__('app.models',fromlist=['DnsResult']).DnsResult("OK",["93.184.216.34"])), patch.object(tester.session,"get",side_effect=exceptions.SSLError("bad cert")):
    self.assertEqual(tester.test("https://example.com").classification,"TLS_ERROR")
+ @unittest.skipUnless(__import__("importlib").util.find_spec("requests"), "requests dependency is not installed")
+ def test_fqdn_dns_lookup_is_cached(self):
+  from app.http_client import WebTester
+  from app.models import DnsResult
+  tester=WebTester({"blocking":[],"ip_restriction":[],"proxy_headers":[]})
+  with patch("app.http_client.resolve",return_value=DnsResult("OK",["93.184.216.34"])) as lookup, patch.object(tester.session,"get",side_effect=__import__('requests').exceptions.ConnectTimeout()):
+   tester.test("https://example.com/one")
+   tester.test("https://example.com/two")
+  lookup.assert_called_once_with("example.com")

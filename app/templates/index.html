@@ -3,6 +3,6 @@
 <section class="controls"><label class="file">Charger URLs <input id="file" type="file" accept=".txt,.csv,text/plain,text/csv"></label><button id="add">Ajouter URL</button><button id="detect">Detect Public IP</button><label>Connexions <input id="workers" type="number" min="1" max="20" value="5"></label><button id="test" class="primary">Test All</button><button id="stop">Stop</button><a href="/api/export/csv">Export CSV</a><a href="/api/export/html">Export HTML</a><button id="clear">Clear</button></section>
 <p id="message" role="status"></p><progress id="progress" value="0" max="1"></progress><p id="summary">0 URL · état : idle</p>
 <section class="table-wrap"><table><thead><tr><th>URL</th><th>Status</th><th>HTTP</th><th>Final URL</th><th>Public IP</th><th>Duration</th><th>Classification</th><th>Confidence</th></tr></thead><tbody id="rows"></tbody></table></section>
-<section class="detail"><h2>Détails</h2><pre id="details">Sélectionnez une ligne après le test.</pre></section>
+<section class="detail"><div class="detail-heading"><h2>Détails</h2><button id="copy-result" type="button" disabled>Copier le résultat</button></div><pre id="details">Sélectionnez une ligne après le test.</pre></section>
 <p class="notice">ACCESS_DENIED et IP_RESTRICTION sont des indications issues des réponses observées, pas une preuve définitive de la cause du blocage.</p>
 </main><script src="{{ url_for('static', filename='app.js') }}"></script></body></html>
