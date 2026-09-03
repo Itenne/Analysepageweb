@@ -24,6 +24,7 @@ class TestResult:
     remote_ip: str = ""
     headers: dict[str, str] = field(default_factory=dict)
     page_title: str = ""
+    page_html: str = ""
     classification: str = "UNKNOWN"
     confidence: str = "UNKNOWN"
     reason: str = ""

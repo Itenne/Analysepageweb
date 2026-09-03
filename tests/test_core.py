@@ -33,13 +33,14 @@ class CoreTests(unittest.TestCase):
   urls=["https://Example.com/a", "http://example.com/b", "https://other.example/"]
   self.assertEqual(unique_urls_by_fqdn(urls), ["https://Example.com/a", "https://other.example/"])
  def test_exports(self):
-  r=TestResult("https://example.com",classification="ACCESS_ALLOWED")
+  r=TestResult("https://example.com",classification="ACCESS_ALLOWED",page_html="<main>Page result</main>")
   with tempfile.TemporaryDirectory() as d:
    csv_path=Path(d)/"x.csv"; excel_path=Path(d)/"x.xlsx"; html_path=Path(d)/"x.html"; export_csv([r],csv_path); export_excel([r],excel_path,{"ip":"203.0.113.1"}); export_html([r],html_path,{"ip":"203.0.113.1"})
-   self.assertIn("classification",csv_path.read_text()); self.assertIn("Test Summary",html_path.read_text())
+   self.assertIn("page_html",csv_path.read_text()); self.assertIn("<main>Page result</main>",csv_path.read_text()); self.assertIn("Test Summary",html_path.read_text()); self.assertIn("&lt;main&gt;Page result&lt;/main&gt;",html_path.read_text())
    from zipfile import ZipFile
    with ZipFile(excel_path) as workbook:
-    self.assertIn("ACCESS_ALLOWED",workbook.read("xl/worksheets/sheet2.xml").decode()); self.assertIn("203.0.113.1",workbook.read("xl/worksheets/sheet1.xml").decode())
+    results_xml=workbook.read("xl/worksheets/sheet2.xml").decode()
+    self.assertIn("ACCESS_ALLOWED",results_xml); self.assertIn("Page result",results_xml); self.assertIn("203.0.113.1",workbook.read("xl/worksheets/sheet1.xml").decode())
 
 class HttpClientTests(unittest.TestCase):
  @unittest.skipUnless(__import__("importlib").util.find_spec("requests"), "requests dependency is not installed")
@@ -58,5 +59,17 @@ class HttpClientTests(unittest.TestCase):
   tester=WebTester({"blocking":[],"ip_restriction":[],"proxy_headers":[]})
   with patch("app.http_client.resolve",return_value=DnsResult("OK",["93.184.216.34"])) as lookup, patch.object(tester.session,"get",side_effect=__import__('requests').exceptions.ConnectTimeout()):
    tester.test("https://example.com/one")
-   tester.test("https://example.com/two")
+  tester.test("https://example.com/two")
   lookup.assert_called_once_with("example.com")
+ @unittest.skipUnless(__import__("importlib").util.find_spec("requests"), "requests dependency is not installed")
+ def test_page_html_is_kept_for_exports(self):
+  from unittest.mock import MagicMock
+  from app.http_client import WebTester
+  from app.models import DnsResult
+  tester=WebTester({"blocking":[],"ip_restriction":[],"authentication":[],"proxy_headers":[]})
+  response=MagicMock(url="https://example.com/",status_code=200,encoding="utf-8",history=[],headers={})
+  response.iter_content.return_value=[b"<html><title>Example</title>",b"<main>Page result</main></html>"]
+  with patch("app.http_client.resolve",return_value=DnsResult("OK",["93.184.216.34"])), patch.object(tester.session,"get",return_value=response):
+   result=tester.test("https://example.com")
+  self.assertEqual(result.page_html,"<html><title>Example</title><main>Page result</main></html>")
+  self.assertEqual(result.page_title,"Example")
